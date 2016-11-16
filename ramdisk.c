@@ -435,6 +435,142 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
 	return 0;
 }
 
+static int ramdisk_utime(const char *path, struct utimbuf *ubuf)
+{
+	return 0;
+}
 
+//TODO modify
+static int ramdisk_rename(const char *from, const char *to)
+{
+	int isValid, isValid2;
+	isValid = validatePath(from);
+	isValid2 = validatePath(to);	
+		
+	if(valid(from) == 0) {
+		Node *ptr = getPath(from);
+		Node *temp = getPath(to);
+		char new_file_name[256];
+				
+		strcpy(new_file_name, nFile);
+		if(valid(2) != 0) {	//to path not already present. Then create one
+			if(temp->isFile == 1 ) {
+				memset(ptr->nName, 0, 255);
+				strcpy(ptr->nName, new_file_name);
+				return 0;
+			}
+			if(temp->isDir == 1) {
+				ramdisk_create(to, ptr->nMeta->st_mode, NULL);
+				Node *new_node  = getPath(to);
+				
+			       	setParamsForRename(&new_node, ptr);
+				if(setSizeForRename(&new_node, ptr) == -1)
+					return -ENOSPC;
+				    		
+				ramdisk_unlink(from);
+				return 0;
+			}			
+			else
+				return -ENOENT;
+		}
+		else if(valid(to) == 0) {	//to path already present.
+			if(temp->isFile == 1) {
+				int fromSize, toSize;
+				setParamsForRename(&temp, ptr);
+				fromSize = ptr->nMeta->st_size;
+				toSize = temp->nMeta->st_size;
+				memset(temp->fMeta, 0, toSize);
+				
+				if(setSizeForRename2(&temp, ptr, fromSize) == -1)
+					return -ENOSPC;
+				
+				memset(temp->fMeta, 0, toSize);
+				
+				ramdisk_unlink(from);
+				return 0;
+		        }
+		}
+		else
+			return -ENOENT;	
+	}
+	else
+		return -ENOENT;
+        return 0;
+}
 
+static int ramdisk_fsync(const char *path, int isdatasync,
+		     struct fuse_file_info *fi)
+{
+	return 0;
+}
+
+static struct fuse_operations ramdisk_oper = {
+	.getattr	= ramdisk_getattr,
+	.readdir	= ramdisk_readdir,
+	.open		= ramdisk_open,
+	.opendir	= ramdisk_opendir,
+	.read		= ramdisk_read,
+	.write		= ramdisk_write,
+	.mkdir		= ramdisk_mkdir,
+	.rmdir		= ramdisk_rmdir,
+	.create		= ramdisk_create,
+	.unlink		= ramdisk_unlink, 
+	.rename		= ramdisk_rename, 
+	.utime		= ramdisk_utime,
+	.fsync		= ramdisk_fsync
+};
+
+void writeEC(char *fileName)
+{
+	FILE *fw = fopen(fileName, "wb");
+	if (fw) {
+		fwrite(root, sizeof(Node), totalnodes, fw);
+    		fclose(fw);
+	}	
+}
+
+void readEC(char *fileName)
+{
+	FILE *fr = fopen(fileName, "rb");
+	if (fr) {
+		fread(root, sizeof(Node), totalnodes, fr);
+    		fclose(fr);
+	}
+}
+
+int main(int argc, char *argv[])
+{
+	int flag = 0;
+	char *filename = NULL;
+	if( argc != 3 && argc != 4 )
+        {
+                printf("Invalid arguments\n");	//todo too many args
+                printf("Usage: ramdisk </path/to/dir> <size> [<filename>]\n");
+                return -1;
+        }
+
+        if(argc == 4)
+        	flag = 1;
+     	argc = argc - 1;
+        memAvail = (long) atoi(argv[2]);
+        memAvail = memAvail * 1024 * 1024;
+
+        initRamdisk();
+	int totalnodes = 0;
+        if(flag == 1) {
+        	totalnodes = memAvail / sizeof(struct node);
+        	filename=(char*)malloc(sizeof(char)*strlen(argv[3]));
+		strcpy(fileName, argv[3]);
+        	argc = argc - 1;
+        	readEC(filename);
+        }	
+
+	fuse_main(argc, argv, &ramdisk_oper, NULL);
+
+	if(flag == 1) {
+		writeEC(fileName);
+	}
+
+	return 0;
+}
 
