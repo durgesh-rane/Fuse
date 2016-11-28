@@ -57,6 +57,19 @@ int isQueueEmpty(struct queue *q)	//DONE
 	return (q->front == NULL && q->rear == NULL)? 1 : 0;
 }
 
+void printQ(struct queue *q)
+{
+	fprintf(stdout, "in printQ\n");
+	if(!q->front)
+		fprintf(stdout, "no q front\n");
+	struct queuenode *temp = q->front;
+	while(temp)
+	{
+		fprintf(stdout, "%s\n",temp->filenode->filename);
+		temp=temp->next;
+	}
+}
+
 void enQueue(struct queue *q, struct node *filenode)	//DONE
 {
 	struct queuenode *tmpNode = (struct queuenode *)malloc(sizeof(struct queuenode));
@@ -64,11 +77,13 @@ void enQueue(struct queue *q, struct node *filenode)	//DONE
 	tmpNode->next = NULL;
 	if(isQueueEmpty(q))
 	{
+		fprintf(stdout, "in init queue block for enqueue\n");
 		q->front = tmpNode;
 		q->rear = tmpNode;
 	}
 	else
 	{
+		fprintf(stdout, "not in init queue block for enqueue\n");
 		q->rear->next = tmpNode;
 		q->rear = tmpNode;
 	}
@@ -129,6 +144,7 @@ printf("1\n");
 	if(!root->meta)
 		return -ENOSPC;
 	strcpy(root->filename, "/");
+	fprintf(stdout, "%s\n",root->filename);
 	root->isfile = 0;
 	root->parent = NULL;
 	printf("1\n");
@@ -153,9 +169,7 @@ printf("1\n");
 
 int valid(const char *path)
 {
-	#ifdef DEBUG
-		printf("in valid\n");				
-	#endif
+	fprintf(stdout, "in valid\n");				
 	char pathTemp[MAXLEN];
 	strcpy(pathTemp, path);
 	char *token = strtok(pathTemp, "/");
@@ -179,20 +193,36 @@ int valid(const char *path)
 
 struct node * get(const char *path)
 {
-	#ifdef DEBUG
-		printf("in get\n");				
-	#endif
+	fprintf(stdout, "in get: %s\n",path);				
 	char pathTemp[MAXLEN];
 	strcpy(pathTemp, path);
 	char *token = strtok(pathTemp, "/");
+	
 	if(!token && (strcmp(pathTemp, "/") == 0))
 		return root;
 	struct node *head = root;
 	while(token)
 	{
+		fprintf(stdout, "in while\n");
+		if(!head->q)
+			return NULL;
 		struct queuenode *tempnode = head->q->front;
+		if(!tempnode)
+		{
+			fprintf(stdout, "queuenode does not exist\n");
+			return NULL;
+		}
+		if(!tempnode->filenode)
+		{
+			fprintf(stdout, "filenode does not exist\n");
+			return NULL;
+		}
+		fprintf(stdout, "entering second while\n");
+		fprintf(stdout, "%s\n",tempnode->filenode->filename);
 		while(tempnode || strcmp(tempnode->filenode->filename, token)==0)
 		{
+			fprintf(stdout, "%s\n",tempnode->filenode->filename);
+			fprintf(stdout,"in second while\n");
 			tempnode = tempnode->next;
 		}
 		if(!tempnode)
@@ -200,14 +230,13 @@ struct node * get(const char *path)
 		head = tempnode->filenode;
 		token = strtok(NULL, "/");	
 	}
+	fprintf(stdout, "exiting get\n");
 	return head;
 }
 
 struct node * getParent(const char *path)
 {
-	#ifdef DEBUG
-		printf("in getParent\n");				
-	#endif
+		printf("in getParent\n");		
 	char pathTemp[MAXLEN];
 	strcpy(pathTemp, path);
 	char *token = strtok(pathTemp, "/");
@@ -216,7 +245,22 @@ struct node * getParent(const char *path)
 	struct node *head = root;
 	while(token)
 	{
+		if(!head->q)
+		{
+			fprintf(stdout, "queue does not exist\n");
+			return head;
+		}
 		struct queuenode *tempnode = head->q->front;
+		if(!tempnode)
+		{
+			fprintf(stdout, "queuenode does not exist\n");
+			return head;
+		}
+		if(!tempnode->filenode)
+		{
+			fprintf(stdout, "filenode does not exist\n");
+			return head;
+		}
 		while(tempnode || strcmp(tempnode->filenode->filename, token)==0)
 		{
 			tempnode = tempnode->next;
@@ -241,15 +285,20 @@ static int ramdisk_getattr(const char *path, struct stat *stbuf)
 	#endif
 	struct node *tmpNode = get(path);
 	if(!tmpNode)
+	{
+		
 		return -ENOENT;
-	stbuf->st_atime = tmpNode->meta->st_atime;
-    stbuf->st_mtime = tmpNode->meta->st_mtime;  
-    stbuf->st_ctime = tmpNode->meta->st_ctime;            
-	stbuf->st_nlink = tmpNode->meta->st_nlink;
-	stbuf->st_mode  = tmpNode->meta->st_mode;	
-	stbuf->st_uid   = tmpNode->meta->st_uid;
-    stbuf->st_gid   = tmpNode->meta->st_gid;            
-	stbuf->st_size = tmpNode->meta->st_size;
+	}
+	if(tmpNode->isfile == 1)
+	{
+		stbuf->st_mode = S_IFREG | 0666;
+		stbuf->st_nlink = 1;
+	}
+	else
+	{
+		stbuf->st_mode = S_IFDIR | 0755;
+		stbuf->st_nlink = 2;
+	}
 	return 0;
 }
 
@@ -374,15 +423,10 @@ static int ramdisk_write(const char *path, const char *buf, size_t size, off_t o
 
 static int ramdisk_mkdir(const char *path, mode_t mode)
 {
-	fprintf(stdout, "%s\n",path);
-	#ifdef DEBUG
-		printf("in ramdisk mkdir\n");				
-	#endif
-	if(valid(path)!=0)
-		return -ENOENT;
+	fprintf(stdout, "mkdir: %s\n",path);
 
 	struct node *parent = getParent(path);
-
+	fprintf(stdout, "got parent\n");
 	struct node *dir = (struct node *)malloc(sizeof(struct node));
 	dir->meta = (struct stat *)malloc(sizeof(struct stat));
 	if(!dir)
@@ -407,6 +451,7 @@ static int ramdisk_mkdir(const char *path, mode_t mode)
     dir->meta->st_gid = getgid();
 	parent->meta->st_nlink = parent->meta->st_nlink + 1;
 	enQueue(parent->q, dir);
+	printQ(parent->q);
 	return 0;
 }
 
