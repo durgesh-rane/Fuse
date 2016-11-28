@@ -73,9 +73,49 @@ void enQueue(struct queue *q, struct node *filenode)	//DONE
 	}
 }
 
+int removeQueue(struct queue *q, struct node *filenode)	//DONE
+{
+	struct queuenode *prev = NULL;
+	struct queuenode *curr = q->front;
+	if(!filenode)
+		return 0;
+	if(isQueueEmpty(q))
+		return 0;
+	int size = sizeof(filenode);
+	if(q->front->filenode == filenode && q->rear->filenode == filenode)
+	{
+		initializeQueue(q);
+		return size;
+	}
+	if(q->front->filenode == filenode)
+	{
+		q->front = q->front->next;
+		return size;
+	}
+	while(curr)
+	{
+		if(curr->filenode == filenode)
+		{
+			if(curr == q->rear)
+			{
+				prev->next = curr->next;
+				q->rear = prev;
+			}
+			else
+			{
+				prev->next=curr->next;
+			}
+			return size;
+		}
+	}
+	return 0;
+}
 
 int initRamdisk()
 {
+	#ifdef DEBUG
+		printf("in init ramdisk\n");				
+	#endif
 	root = (struct node *)malloc(sizeof(struct node));
 	if(!root)
 		return -ENOSPC;
@@ -104,6 +144,9 @@ int initRamdisk()
 
 int valid(const char *path)
 {
+	#ifdef DEBUG
+		printf("in valid\n");				
+	#endif
 	char pathTemp[MAXLEN];
 	strcpy(pathTemp, path);
 	char *token = strtok(pathTemp, "/");
@@ -127,6 +170,9 @@ int valid(const char *path)
 
 struct node * get(const char *path)
 {
+	#ifdef DEBUG
+		printf("in get\n");				
+	#endif
 	char pathTemp[MAXLEN];
 	strcpy(pathTemp, path);
 	char *token = strtok(pathTemp, "/");
@@ -142,55 +188,87 @@ struct node * get(const char *path)
 		}
 		if(!tempnode)
 			return NULL;
-		head = tempnode->filenode;	
+		head = tempnode->filenode;
+		token = strtok(NULL, "/");	
 	}
 	return head;
 }
 
-
+struct node * getParent(const char *path)
+{
+	#ifdef DEBUG
+		printf("in getParent\n");				
+	#endif
+	char pathTemp[MAXLEN];
+	strcpy(pathTemp, path);
+	char *token = strtok(pathTemp, "/");
+	if(!token && (strcmp(pathTemp, "/") == 0))
+		return root->parent;
+	struct node *head = root;
+	while(token)
+	{
+		struct queuenode *tempnode = head->q->front;
+		while(tempnode || strcmp(tempnode->filenode->filename, token)==0)
+		{
+			tempnode = tempnode->next;
+		}
+		if(!tempnode)
+			return NULL;
+		head = tempnode->filenode;
+		token = strtok(NULL, "/");	
+		if(strchr(token,'/') == NULL)
+		{
+			strcpy(file, token);
+			return head;
+		}
+	}
+	return NULL;
+}
 
 static int ramdisk_getattr(const char *path, struct stat *stbuf)
 {
-	struct node *temp = NULL;
-	struct node *filenode = get(path);
-	if(!filenode)
+	#ifdef DEBUG
+		printf("in ramdisk getattr\n");				
+	#endif
+	struct node *tmpNode = get(path);
+	if(!tmpNode)
 		return -ENOENT;
-	if(filenode->isfile == 0)
-	{
-		stbuf->st_mode = S_IFDIR | 0755;
-		stbuf->st_nlink = 2;
-	}
-	else
-	{
-		stbuf->st_mode = S_IFREG | 0444;
-		stbuf->st_nlink = 1;
-		stbuf->st_size = strlen(filenode->content);
-	}
+	stbuf->st_atime = tmpNode->meta->st_atime;
+    stbuf->st_mtime = tmpNode->meta->st_mtime;  
+    stbuf->st_ctime = tmpNode->meta->st_ctime;            
+	stbuf->st_nlink = tmpNode->meta->st_nlink;
+	stbuf->st_mode  = tmpNode->meta->st_mode;	
+	stbuf->st_uid   = tmpNode->meta->st_uid;
+    stbuf->st_gid   = tmpNode->meta->st_gid;            
+	stbuf->st_size = tmpNode->meta->st_size;
 	return 0;
 }
 
 // static int ramdisk_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 // 			 off_t offset, struct fuse_file_info *fi)
 // {
-// 	if(validdir(path) != 0)
+// 	if(valid(path) != 0)
 // 		return -ENOENT;
-// 	struct node *temp = getdir(path);
-// 	struct node *it = temp->subdir;
+// 	struct node *dir = get(path);
 // 	filler(buf, ".", NULL, 0);
 // 	filler(buf, "..", NULL, 0);
-// 	while(it)
+// 	struct queuenode *head = dir->q->front;
+// 	while(head)
 // 	{
-// 		filler(buf, it->name, NULL, 0);
-	
+// 		filler(buf, head->filenode->filename, NULL, 0);
+// 		head = head->next;
 // 	}
 // 	time_t currtime;
 // 	time(&currtime);
-// 	temp->meta->st_atime = currtime;
+// 	dir->meta->st_atime = currtime;
 // 	return 0;
 // }
 
 static int ramdisk_open(const char *path, struct fuse_file_info *fi)
 {
+	#ifdef DEBUG
+		printf("in ramdisk open\n");				
+	#endif
 	if ((fi->flags & 3) != O_RDONLY)
 		return -EACCES;
 	
@@ -203,6 +281,9 @@ static int ramdisk_open(const char *path, struct fuse_file_info *fi)
 static int ramdisk_read(const char *path, char *buf, size_t size, off_t offset,
 		      struct fuse_file_info *fi)
 {
+	#ifdef DEBUG
+		printf("in ramdisk read\n");				
+	#endif
 	size_t len;
 	struct node *temp = get(path);
 	if(!temp)
@@ -231,6 +312,9 @@ static int ramdisk_read(const char *path, char *buf, size_t size, off_t offset,
 static int ramdisk_write(const char *path, const char *buf, size_t size, off_t offset,
                       struct fuse_file_info *fi)
 {
+	#ifdef DEBUG
+		printf("in ramdisk write\n");				
+	#endif
 	if(size > memfree)
 		return -ENOSPC;
 	struct node *temp = get(path);
@@ -239,9 +323,12 @@ static int ramdisk_write(const char *path, const char *buf, size_t size, off_t o
 	long less;
 	long less2;
 	char *metadata = NULL;
+	
 	if(temp->isfile == 0)
 		return -EISDIR;
+	
 	len = temp->meta->st_size;
+	
 	if(size > 0)
 	{
 		if(len == 0)
@@ -250,7 +337,7 @@ static int ramdisk_write(const char *path, const char *buf, size_t size, off_t o
 			temp->content = (char *)malloc(sizeof(char) * size);
 			memcpy(temp->content + offset, buf, size);
 			temp->meta->st_size = offset +  size;
-			memfree = memfree + size;
+			memfree = memfree - size;
 		}
 		else
 		{
@@ -277,257 +364,126 @@ static int ramdisk_write(const char *path, const char *buf, size_t size, off_t o
 	return size;
 }
 
-// void insert(struct node **temp, struct node **dir)
-// {
-// 	if((*temp)->subdir) {
-// 		struct node *it;
-//                 for(it = (*temp)->subdir; it->next != NULL; it = it->next)
-//                 	;
-//                 it->next = dir;			
-// 	}
-// 	else
-// 		(*temp)->subdir = (*temp);
-// }
+static int ramdisk_mkdir(const char *path, mode_t mode)
+{
+	#ifdef DEBUG
+		printf("in ramdisk mkdir\n");				
+	#endif
+	if(valid(path)!=0)
+		return -ENOENT;
+
+	struct node *parent = getParent(path);
+
+	struct node *dir = (struct node *)malloc(sizeof(struct node));
+	dir->meta = (struct stat *)malloc(sizeof(struct stat));
+	if(!dir)
+		return -1;
+	memfree = memfree - sizeof(struct node) - sizeof(struct stat);
+	if(memfree <  0)
+		return -ENOSPC;
+    
+    strcpy(dir->filename, file);
+    dir->parent = parent;        
+	dir->isfile = 0;
+	time_t currtime;
+	time(&currtime);
+	dir->meta = (struct stat *)malloc(sizeof(struct stat));
+    dir->meta->st_atime = currtime;
+    dir->meta->st_mtime = currtime;
+    dir->meta->st_ctime = currtime;
+    dir->meta->st_size = MAXLEN;
+	dir->meta->st_nlink = 2;
+    dir->meta->st_mode = S_IFDIR | 0755;
+    dir->meta->st_uid = getuid();
+    dir->meta->st_gid = getgid();
+	parent->meta->st_nlink = parent->meta->st_nlink + 1;
+	enQueue(parent->q, dir);
+	return 0;
+}
 
 
-
-
-// static int ramdisk_mkdir(const char *path, mode_t mode)
-// {
-// 	struct node *temp = get(path);
-// 	struct node *dir = (struct node *)malloc(sizeof(struct node));
-// 	dir->meta = (struct stat *)malloc(sizeof(struct stat));
-// 	if(!dir)
-// 		return -1;
-// 	memfree = memfree - (sizeof(struct node) - sizeof(struct stat));
-// 	if(memfree < = 0)
-// 		return -ENOSPC;
-// 	time_t currtime;
-//     time(&currtime);
-//     strcpy(*dir->name, nFile);
-        
-// 	dir->isfile = 0;
-// 	time(&currtime);
-//     dir->meta->st_atime = currtime;
-//     dir->meta->st_mtime = currtime;
-//     dir->meta->st_ctime = currtime;
-//     dir->parent = temp;
-//     dir->subdir = NULL;
-//     dir->next = NULL;
-//     dir->meta->st_size = MAXLEN;
-// 	dir->meta->st_nlink = 2;
-//     dir->meta->st_mode = S_IFDIR | 0755;
-//     dir->meta->st_uid = getuid();
-//     dir->meta->st_gid = getgid();
-// 	insert(&temp, &dir);
-// 	temp->meta->st_nlink = temp->meta->st_nlink + 1;
-// 	return 0;
-// }
-
-// void rmutil(struct node **father, struct node **temp)
-// {
-// 	if((*father)->subdir == (*temp))
-//         {
-//         	if((*temp)->next == NULL)
-//         	{
-//         		//delete the lone leaf directory		
-//                 	(*father)->subdir = NULL;
-//                 }
-//                 else
-//                 {
-//                 	//make super struct struct node point to 2nd struct struct node in line
-//                 	(*father)->subdir = (*temp)->next;
-//                 }
-//         }		  
-//         else
-//         {
-//                 struct struct node *it;
-//                 for(it = (*father)->subdir; it != NULL; it = it->next)
-//                 {
-//                         if(it->next == (*temp))
-//                         {
-//                                 it->next = (*temp)->next;
-//                                 break;
-//                         }
-//                 }
-//         }
-// }
-
-// static int ramdisk_rmdir(const char *path)
-// {
-// 	if(valid(path) != 0)
-// 		return -ENOENT;
+static int ramdisk_rmdir(const char *path)
+{
+	#ifdef DEBUG
+		printf("in ramdisk rmdir\n");				
+	#endif
+	if(valid(path) != 0)
+		return -ENOENT;
 	
-// 	struct node *temp;
-// 	temp = get(path);
-// 	if(temp->subdir)
-// 		return -ENOTEMPTY;
-// 	struct node *father;
-// 	father = temp->parent;	
-// 	rmUtil(&father, &temp);		
-// 	free(father->meta);
-// 	free(temp);
-// 	memfree = memfree + (sizeof(struct node) + sizeof(struct stat));
-// 	father->meta->st_nlink = father->meta->st_nlink-1;
-// 	return 0;
-// }
+	struct node *temp;
+	temp = get(path);
+	if(isQueueEmpty(temp->q)!=1)
+		return -ENOTEMPTY;
+	struct node *father;
+	father = temp->parent;	
+	removeQueue(father->q, temp);		
+	memfree = memfree + sizeof(temp);
+	father->meta->st_nlink = father->meta->st_nlink-1;
+	return 0;
+}
 
 static int ramdisk_opendir(const char *path, struct fuse_file_info *fi)
 {
+	#ifdef DEBUG
+		printf("in ramdisk opendir\n");				
+	#endif
 	struct node *tempnode = get(path);
 	if(!tempnode)
 		return -ENOENT;
 	if(tempnode->isfile == 1)
 		return -ENOTDIR;
-	if(tempnode->isfile == 0)
-		return 0
+	if(tempnode->isfile == 1)
+		return -1;
+	return 0;
 }
 
-// static int ramdisk_unlink(const char *path)
-// {
-// 	if(valid(path) != 0) {
-// 		return -ENOENT;	
-// 	struct node *temp, *father;
-// 	temp = get(path);
-// 	father = temp->parent;
-		
-// 	rmUtil(&father, &temp);
-	
-// 	if(temp->meta->st_size == 0)
-// 	{
-// 		free(temp->meta);
-// 		free(temp);
-// 	}
-// 	else
-// 	{	
-// 		memfree = memfree + temp->meta->st_size;
-// 		free(temp->content);
-// 		free(temp->meta);
-// 		free(temp);
-// 	}	
-	
-// 	long more = (sizeof(struct node) + sizeof(struct stat));
-// 	memfree = memfree + more;
-// 	return 0;
-// }
 
+static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+	#ifdef DEBUG
+		printf("in ramdisk create\n");				
+	#endif
+	if(memfree < 0 )
+		return -ENOSPC;
+	struct node *parent = getParent(path);
+	struct node *new = (struct node *)malloc(sizeof(struct node));
+	
+	time_t currtime;
+	time(&currtime);
+	strcpy(new->filename, file);
+	
+	new->isfile = 1;
+	new->parent = parent;
+	new->meta = (struct stat *)malloc(sizeof(struct stat));
+	new->meta->st_atime = currtime;
+	new->meta->st_mtime = currtime;
+	new->meta->st_ctime = currtime;
+	
+	new->meta->st_size = 0;	
+	new->meta->st_mode = S_IFREG | mode;
+	new->meta->st_nlink = 1;
+	new->meta->st_uid = getuid();
+	new->meta->st_gid = getgid();  	
+	new->content = NULL;
+	long less = sizeof(new) + sizeof(stat);	
+	memfree = memfree - less;
+	if(memfree < 0)
+		return -ENOSPC;
+	enQueue(parent->q, new);
+	return 0;
+}
 
-
-// static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *fi)
-// {
-// 	if(memfree < 0 )
-// 		return -ENOSPC;
-	
-// 	struct node *temp = getPath(path);	
-// 	struct node *new = (struct node *)malloc(sizeof(struct node));
-	
-// 	time_t currtime;
-// 	time(&currtime);
-// 	strcpy(new->name, nFile);
-	
-// 	new->isfile = 1;
-	
-// 	new->meta->st_atime = currtime;
-// 	new->meta->st_mtime = currtime;
-// 	new->meta->st_ctime = currtime;
-	
-// 	new->meta->st_size = 0;	
-// 	new->parent = temp;
-// 	new->subdir = NULL;
-// 	new->next = NULL;
-	
-// 	new->meta->st_mode = S_IFREG | mode;
-// 	new->meta->st_nlink = 1;
-// 	new->meta->st_uid = getuid();
-// 	new->meta->st_gid = getgid();  	
-// 	new->content = NULL;
-// 	long less = sizeof(new) + sizeof(stat);	
-// 	memfree = memfree - less;
-// 	if(memfree < 0)
-// 		return -ENOSPC;
-// 	insert(&temp, &new);
-// 	return 0;
-// }
-
-// static int ramdisk_utime(const char *path, struct utimbuf *ubuf)
-// {
-// 	return 0;
-// }
-
-//TODO modify
-// static int ramdisk_rename(const char *from, const char *to)
-// {	
-
-// 	struct node *ptr = NULL;
-// 	struct node *temp = NULL;
-// 	char newfilename[256];		
-// 	if(valid(from) == 0) 
-// 	{
-// 		ptr = getPath(from);
-// 		temp = getPath(to);
-				
-// 		strcpy(new_file_name, ptr->filename);
-// 		if(valid(to) != 0) 
-// 		{	//to path not already present. Then create one
-// 			temp = (struct node *)malloc(sizeof(struct node));
-// 			if(ptr->isfile == 1 ) 
-// 			{
-// 				memset(ptr->name, 0, 255);
-// 				strcpy(ptr->name, new_file_name);
-// 				return 0;
-// 			}
-// 			if(temp->isfile != 1) 
-// 			{
-// 				ramdisk_create(to, ptr->nMeta->st_mode, NULL);
-// 				struct node *new_node  = getPath(to);
-				
-// 			    setParamsForRename(&new_node, ptr);
-// 				if(setSizeForRename(&new_node, ptr) == -1)
-// 					return -ENOSPC;
-				    		
-// 				ramdisk_unlink(from);
-// 				return 0;
-// 			}			
-// 			else
-// 				return -ENOENT;
-// 		}
-// 		else if(valid(to) == 0) 
-// 		{	//to path already present.
-// 			if(temp->isfile == 1) 
-// 			{
-// 				int fromSize, toSize;
-// 				setParamsForRename(&temp, ptr);
-// 				fromSize = ptr->meta->st_size;
-// 				toSize = temp->meta->st_size;
-// 				memset(temp->content, 0, toSize);
-				
-// 				if(setSizeForRename2(&temp, ptr, fromSize) == -1)
-// 					return -ENOSPC;
-				
-// 				memset(temp->content, 0, toSize);
-				
-// 				ramdisk_unlink(from);
-// 				return 0;
-// 		        }
-// 		}
-// 		else
-// 			return -ENOENT;	
-// 	}
-// 	else
-// 		return -ENOENT;
-//     return 0;
-// }
 
  static struct fuse_operations ramdisk_oper = {
- 	.getattr	= ramdisk_getattr,
 // 	.readdir	= ramdisk_readdir,
  	.open		= ramdisk_open,
+ 	.getattr	= ramdisk_getattr,
  	.opendir	= ramdisk_opendir,
  	.read		= ramdisk_read,
  	.write		= ramdisk_write,
-// 	.mkdir		= ramdisk_mkdir,
-// 	.rmdir		= ramdisk_rmdir,
-// 	.create		= ramdisk_create,
+ 	.mkdir		= ramdisk_mkdir,
+ 	.rmdir		= ramdisk_rmdir,
+ 	.create		= ramdisk_create,
 // 	.unlink		= ramdisk_unlink, 
 // 	.rename		= ramdisk_rename, 
  };
@@ -544,6 +500,7 @@ int main(int argc, char *argv[])
     memfree = (long) atoi(argv[2]);
     memfree = memfree * 1024 * 1024;
     argc = argc - 1;
+    initRamdisk();
 	fuse_main(argc, argv, &ramdisk_oper, NULL);
 	return 0;
 }
