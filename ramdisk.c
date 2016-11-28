@@ -473,6 +473,93 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
 	return 0;
 }
 
+static int ramdisk_rename(const char *from, const char *to)
+{
+	int isValid, isValid2;
+	isValid = validatePath(from);
+	isValid2 = validatePath(to);
+	struct node *from  = NULL;
+	struct node *to = NULL;
+	struct node *toParent = NULL;	
+	char new_file_name[256];
+	time_t currtime;
+	
+	if(valid(from )!=0)
+		return -ENOENT;
+
+	from = get(from);
+				
+	strcpy(new_file_name, file);
+
+	if(valid(to)==0)
+	{
+		memset(to->filename,0,255);
+		strcpy(to->filename, new_file_name);
+		time(&currtime);
+		to->meta->st_atime = currtime;
+		to->meta->st_mtime = currtime;
+		to->meta->st_ctime = currtime;
+		return 0;
+	}
+
+	if(valid(to) != 0) 
+	{
+		//to path not already present. Then create one
+		toParent = getParent(to);
+		to = (struct node *)malloc(sizeof(to));
+		to->meta = (struct node *stat)malloc(sizeof(struct));
+		memfree = memfree - sizeof(to) - sizeof(to->meta);
+		if(memfree < 0)
+			return -ENOSPC;
+		if(ptr->isFile == 1 ) 
+		{
+			to->isFile = 1;
+		}
+		if(ptr->isFile != 1) 
+		{
+			to->isFile=0;
+		}
+		memset(to->filename, 0, 255);
+		strcpy(to->filename, new_file_name);
+		to->parent = toParent;
+		to->meta = from->meta;
+		to->meta->st_atime = currtime;
+		to->meta->st_mtime = currtime;
+		to->meta->st_ctime = currtime;
+		enQueue(toParent->q, to);
+		if(ramdisk_unlink(from) == 0)
+			return 0;
+	}
+	
+	return -1;	
+}
+
+static int ramdisk_unlink(const char *path)
+{
+	if(valid(path) != 0)
+		return -ENOENT;	
+
+	struct node *del = get(path);
+	struct node *delParent = getParent(path);
+	del->parent = NULL;
+	removeQueue(delParent->q, del);
+	long more = sizeof(del)+sizeof(del->meta);
+	memfree = memfree + more;
+	del->meta = NULL;
+	del = NULL;
+	return 0;
+}
+
+static int ramdisk_utime(const char *path, struct utimbuf *ubuf)
+{
+	return 0;
+}
+
+static int ramdisk_fsync(const char *path, int isdatasync,
+		     struct fuse_file_info *fi)
+{
+	return 0;
+}
 
  static struct fuse_operations ramdisk_oper = {
 // 	.readdir	= ramdisk_readdir,
@@ -484,8 +571,10 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
  	.mkdir		= ramdisk_mkdir,
  	.rmdir		= ramdisk_rmdir,
  	.create		= ramdisk_create,
-// 	.unlink		= ramdisk_unlink, 
-// 	.rename		= ramdisk_rename, 
+ 	.unlink		= ramdisk_unlink, 
+ 	.rename		= ramdisk_rename,
+ 	.utime	    = ramdisk_utime,
+ 	.fsync	    = ramdisk_fsync 
  };
 
 
