@@ -1,7 +1,7 @@
 #define FUSE_USE_VERSION 30
 
 //#include <config.h>
-#include "fuse.h"
+#include <fuse.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -9,6 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 #include <stdlib.h>
 
@@ -113,17 +114,25 @@ int removeQueue(struct queue *q, struct node *filenode)	//DONE
 
 int initRamdisk()
 {
-	#ifdef DEBUG
-		printf("in init ramdisk\n");				
-	#endif
+	printf("in init ramdisk\n");				
 	root = (struct node *)malloc(sizeof(struct node));
+	printf("1\n");
 	if(!root)
 		return -ENOSPC;
+printf("1\n");
 	time_t currtime;
+printf("1\n");
 	time(&currtime);
+printf("1\n");
 	root->meta = (struct stat *)malloc(sizeof(struct stat));
+printf("1\n");	
+	if(!root->meta)
+		return -ENOSPC;
+	strcpy(root->filename, "/");
 	root->isfile = 0;
 	root->parent = NULL;
+	printf("1\n");
+	root->q = (struct queue *)malloc(sizeof(struct queue));
 	initializeQueue(root->q);
 	root->meta->st_mode = S_IFDIR | 0755;
 	root->meta->st_nlink = 2;
@@ -244,25 +253,24 @@ static int ramdisk_getattr(const char *path, struct stat *stbuf)
 	return 0;
 }
 
-// static int ramdisk_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-// 			 off_t offset, struct fuse_file_info *fi)
-// {
-// 	if(valid(path) != 0)
-// 		return -ENOENT;
-// 	struct node *dir = get(path);
-// 	filler(buf, ".", NULL, 0);
-// 	filler(buf, "..", NULL, 0);
-// 	struct queuenode *head = dir->q->front;
-// 	while(head)
-// 	{
-// 		filler(buf, head->filenode->filename, NULL, 0);
-// 		head = head->next;
-// 	}
-// 	time_t currtime;
-// 	time(&currtime);
-// 	dir->meta->st_atime = currtime;
-// 	return 0;
-// }
+ static int ramdisk_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+ 			 off_t offset, struct fuse_file_info *fi)
+ {
+ 	if(valid(path) != 0)
+ 		return -ENOENT;
+ 	struct node *dir = get(path);
+ 	filler(buf, ".", NULL, 0);
+	filler(buf, "..", NULL, 0);
+ 	struct queuenode *head = dir->q->front;
+ 	while(head)
+ 	{
+	 		filler(buf, head->filenode->filename, NULL, 0); 		head = head->next;
+	}
+ 	time_t currtime;
+ 	time(&currtime);
+ 	dir->meta->st_atime = currtime;
+ 	return 0;
+ }
 
 static int ramdisk_open(const char *path, struct fuse_file_info *fi)
 {
@@ -366,6 +374,7 @@ static int ramdisk_write(const char *path, const char *buf, size_t size, off_t o
 
 static int ramdisk_mkdir(const char *path, mode_t mode)
 {
+	fprintf(stdout, "%s\n",path);
 	#ifdef DEBUG
 		printf("in ramdisk mkdir\n");				
 	#endif
@@ -473,7 +482,7 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
 	return 0;
 }
 
-static int ramdisk_rename(const char *from, const char *to)
+/*static int ramdisk_rename(const char *from, const char *to)
 {
 	int isValid, isValid2;
 	isValid = validatePath(from);
@@ -513,11 +522,11 @@ static int ramdisk_rename(const char *from, const char *to)
 			return -ENOSPC;
 		if(ptr->isFile == 1 ) 
 		{
-			to->isFile = 1;
+			to->isfile = 1;
 		}
 		if(ptr->isFile != 1) 
 		{
-			to->isFile=0;
+			to->isfile=0;
 		}
 		memset(to->filename, 0, 255);
 		strcpy(to->filename, new_file_name);
@@ -533,7 +542,7 @@ static int ramdisk_rename(const char *from, const char *to)
 	
 	return -1;	
 }
-
+*/
 static int ramdisk_unlink(const char *path)
 {
 	if(valid(path) != 0)
@@ -550,19 +559,19 @@ static int ramdisk_unlink(const char *path)
 	return 0;
 }
 
-static int ramdisk_utime(const char *path, struct utimbuf *ubuf)
+/*static int ramdisk_utime(const char *path, struct utimbuf *ubuf)
 {
 	return 0;
 }
-
-static int ramdisk_fsync(const char *path, int isdatasync,
+*/
+/*static int ramdisk_fsync(const char *path, int isdatasync,
 		     struct fuse_file_info *fi)
 {
 	return 0;
 }
-
+*/
  static struct fuse_operations ramdisk_oper = {
-// 	.readdir	= ramdisk_readdir,
+ 	.readdir	= ramdisk_readdir,
  	.open		= ramdisk_open,
  	.getattr	= ramdisk_getattr,
  	.opendir	= ramdisk_opendir,
@@ -572,9 +581,9 @@ static int ramdisk_fsync(const char *path, int isdatasync,
  	.rmdir		= ramdisk_rmdir,
  	.create		= ramdisk_create,
  	.unlink		= ramdisk_unlink, 
- 	.rename		= ramdisk_rename,
- 	.utime	    = ramdisk_utime,
- 	.fsync	    = ramdisk_fsync 
+// 	.rename		= ramdisk_rename,
+ //	.utime	    = ramdisk_utime,
+ //	.fsync	    = ramdisk_fsync 
  };
 
 
@@ -584,12 +593,16 @@ int main(int argc, char *argv[])
 	if( argc != 3)
     {
         printf("Invalid number of arguments\n");	//todo too many args
-        return -1;
+        //return -1;
     }
-    memfree = (long) atoi(argv[2]);
+    printf("in main\n");
+    memfree = (long) atoi(argv[4]);
     memfree = memfree * 1024 * 1024;
     argc = argc - 1;
-    initRamdisk();
+    printf("before init ramdisk\n");
+    int out = initRamdisk();
+    printf("%d\n",out);
+    printf("after init ram\n");
 	fuse_main(argc, argv, &ramdisk_oper, NULL);
 	return 0;
 }
