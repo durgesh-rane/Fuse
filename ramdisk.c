@@ -52,7 +52,7 @@ int initRamdisk()
 	time(&currtime);
 	strcpy(root->filename, "/");
 	strcpy(root->abs,"/");
-	fprintf(stdout, "%s\n",root->filename);
+//	fprintf(stdout, "%s\n",root->filename);
 	root->isfile = 0;
 	root->parent = NULL;
 	root->next = NULL;
@@ -139,6 +139,10 @@ static int ramdisk_getattr(const char *path, struct stat *stbuf)
 	{
 		stbuf->st_mode = S_IFREG | 0666;
 		stbuf->st_nlink = 1;
+		if(tmpNode->content!=NULL)
+		{
+			stbuf->st_size = strlen(tmpNode->content);
+		}
 	}
 	else
 	{
@@ -153,10 +157,7 @@ static int ramdisk_mkdir(const char *path, mode_t mode)
 {
 	fprintf(stdout, "mkdir: %s\n",path);
 	char *parentPath = getParentPath(path);
-	fprintf(stdout, "in ramdisk mkdir: %s\n",parentPath);
 	struct node *parent = get(parentPath);
-	fprintf(stdout, "%s\n",parent->abs);
-	fprintf(stdout, "got parent\n");
 	struct node *dir = (struct node *)malloc(sizeof(struct node));
 	if(!dir)
 		return -1;
@@ -246,9 +247,6 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
 
  static int ramdisk_opendir(const char *path, struct fuse_file_info *fi)
  {
- 	#ifdef DEBUG
- 		printf("in ramdisk opendir\n");				
- 	#endif
  	struct node *tempnode = get(path);
  	if(!tempnode)
  		return -ENOENT;
@@ -515,9 +513,9 @@ int main(int argc, char *argv[])
 	if( argc != 3)
     {
         printf("Invalid number of arguments\n");	//todo too many args
-        //return -1;
+        return -1;
     }
-    memfree = (long) atoi(argv[4]);
+    memfree = (long) atoi(argv[2]);
     memfree = memfree * 1024 * 1024;
     argc = argc - 1;
     int out = initRamdisk();
