@@ -468,19 +468,22 @@ static int ramdisk_rename(const char *from, const char *to)
 	char tempTo[256];
 	strcpy(tempTo, to);
 	fprintf(stdout, "tempTo: %s\n",tempTo);
-	char *token = strtok(tempTo,'/');
+	char *token = strtok(tempTo,"/");
+	fprintf(stdout, "after token\n");
 	char file[256];
 	strcpy(file, token);
+	fprintf(stdout,"printing\n");
+	fprintf(stdout, "token :%s\n",token);
 	fprintf(stdout,"file: %s\n", file);
 	while(token)
 	{
 		fprintf(stdout, "token: %s\n",token);
 		strcpy(file, token);
 		fprintf(stdout, "file: %s\n",file);
-		token = strtok(NULL,'/');
+		token = strtok(NULL,"/");
 	}
-	strcmp(fromnode->filename, file);
-	strcmp(fromnode->abs, to);
+	strcpy(fromnode->filename, file);
+	strcpy(fromnode->abs, to);
 	return 0;
 }
 
