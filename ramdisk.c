@@ -256,10 +256,124 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
  	return 0;
  }
 
+ static int ramdisk_rmdir(const char *path)
+{
+ 	struct node *curr = root;
+	struct node *rm = get(path);
+	fprintf(stdout, "rmdir path\n",rm->abs);
+	struct node *prev = NULL;
+	while(curr)
+	{
+		if(curr == rm)
+		{
+			prev->next = curr->next;
+			fprintf(stdout, "rmdir successful\n");
+			return 0;
+		}
+		prev = curr;
+		curr = curr->next;
+	}	
+	fprintf(stdout, "rmdir no path found\n");
+	return -ENOENT;
+}
+
+ static int ramdisk_read(const char *path, char *buf, size_t size, off_t offset,
+ 		      struct fuse_file_info *fi)
+ {
+ 	#ifdef DEBUG
+ 		printf("in ramdisk read\n");				
+ 	#endif
+ 	size_t len;
+ 	struct node *temp = get(path);
+ 	if(!temp)
+ 		return -ENOENT;
+
+ 	if(temp->isfile == 0)	
+ 		return -EISDIR;	
+	
+ 	len = temp->meta->st_size;
+ 	if(offset < len) {
+ 		if(offset + size > len)		
+ 			size = len - offset;		
+ 		memcpy(buf, temp->content + offset, size);
+ 	} else	
+ 		size = 0;
+		
+ 	if(size > 0) {
+ 		time_t currtime;
+ 		time(&currtime);
+ 		temp->meta->st_atime = currtime;
+ 	}
+	
+ 	return size;	
+ }
+
+ static int ramdisk_write(const char *path, const char *buf, size_t size, off_t offset,
+                       struct fuse_file_info *fi)
+// {
+// 	#ifdef DEBUG
+// 		printf("in ramdisk write\n");				
+// 	#endif
+// 	if(size > memfree)
+// 		return -ENOSPC;
+// 	struct node *temp = get(path);
+// 	size_t len;
+// 	time_t currtime;
+// 	long less;
+// 	long less2;
+// 	char *metadata = NULL;
+	
+// 	if(temp->isfile == 0)
+// 		return -EISDIR;
+	
+// 	len = temp->meta->st_size;
+	
+// 	if(size > 0)
+// 	{
+// 		if(len == 0)
+// 		{
+// 			offset = 0;
+// 			temp->content = (char *)malloc(sizeof(char) * size);
+// 			memcpy(temp->content + offset, buf, size);
+// 			temp->meta->st_size = offset +  size;
+// 			memfree = memfree - size;
+// 		}
+// 		else
+// 		{
+// 			if(offset > len)
+// 				offset = len;
+// 			*metadata = (char *)realloc(temp->content, sizeof(char) * (offset+size));
+// 			if(metadata == NULL)
+// 				return -ENOSPC;
+// 			else
+// 			{
+// 				temp->content = metadata;
+// 				memcpy(temp->content + offset, buf, size);
+					
+// 				less = offset + size;
+// 				less2 = len - less; 
+ 				memfree = memfree + less2;
+ 			}
+ 		}
+ 		time(&currtime);
+         temp->meta->st_ctime = currtime;
+         temp->meta->st_mtime = currtime;
+
+ 	}
+ 	return size;
+ }
+
+
+
 static int ramdisk_utimens(const char *path, const struct timespec tv[2])
  {
  	return 0;
  }
+
+static int ramdisk_open(const char *path, struct fuse_file_info *fi)
+{
+	return 0;
+}
 
 static struct fuse_operations ramdisk_oper = {
  	.getattr	= ramdisk_getattr,
@@ -269,6 +383,8 @@ static struct fuse_operations ramdisk_oper = {
 	.utimens	= ramdisk_utimens,
 	.create		= ramdisk_create,
 	.open		= ramdisk_open,
+	.rmdir		= ramdisk_rmdir,
+	.unlink		= ramdisk_rmdir,
  };
 
 
