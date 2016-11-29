@@ -44,7 +44,7 @@ void printlist()
 }
 int initRamdisk()
 {
-	printf("in init ramdisk\n");				
+	//printf("in init ramdisk\n");				
 	root = (struct node *)malloc(sizeof(struct node));
 	if(!root)
 		return -ENOSPC;
@@ -75,7 +75,10 @@ char *getParentPath(const char *path)
 	size_t pathsize = strlen(path);
 	size_t parentsize = pathsize - newsize-1;
 	if(parentsize==0)
+	{
+		fprintf(stdout, "returing root in getParent\n");
 		return "/";
+	}
 	char *parentpath = malloc(parentsize);
 	fprintf(stdout, "%d %d %d\n",newsize,pathsize,parentsize);
 	strncpy(parentpath, path, parentsize);
@@ -225,7 +228,7 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
 	 filler(buf, "..", NULL, 0);
 	struct node *head = root;
 	char *subdir = malloc(1024);
-
+	head = head->next;
   	while(head)
   	{
 			
@@ -280,7 +283,43 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
  static int ramdisk_read(const char *path, char *buf, size_t size, off_t offset,
  		      struct fuse_file_info *fi)
  {
+	/*fprintf(stdout, "in ramdisk read\n");
  	size_t len;
+ 	struct node *temp = get(path);
+	fprintf(stdout, "ramdisk read filename: %s\n",temp->abs);
+ 	if(!temp)
+ 		return -ENOENT;
+
+ 	if(temp->isfile == 0)	
+ 		return -EISDIR;	
+	if(temp->content == NULL)
+	{
+		size = 0;
+	}
+	else
+	{
+		fprintf(stdout, "ramdisk read in else\n");
+		len = strlen(temp->content);
+		if(offset <  len)
+		{
+			if(offset + size > len)
+			{
+				size = len - offset;
+			}
+			memcpy(buf, temp->content + offset, size);
+		}
+		else
+		{
+			size = 0;
+		}
+			
+	}
+	fprintf(stdout, "ramdisk read buffer: %s\n",buf);
+	fprintf(stdout, "out ramdisk read\n");
+	fprintf(stdout, "ramdisk read size: %d\n",size);
+ 	return size;
+	*/
+	size_t len;
  	struct node *temp = get(path);
  	if(!temp)
  		return -ENOENT;
@@ -310,13 +349,62 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
 			
 	}
 	
- 	return size;	
+return size; 	
  }
 
  static int ramdisk_write(const char *path, const char *buf, size_t size, off_t offset,
                        struct fuse_file_info *fi)
  {
+	/*fprintf(stdout, "in ramdisk write\n");
  	int len;
+	char *write = NULL;
+	int modsize = 0;
+	int diff = 0;
+	int i=0;
+	int j=0;
+ 	struct node *temp = get(path);
+	fprintf(stdout, "write filename: %s\n",temp->abs);
+ 	if(!temp)
+ 		return -ENOENT;
+
+ 	if(temp->isfile == 0)	
+ 		return -EISDIR;
+	
+	if(temp->content  == NULL)
+	{
+		len = strlen(buf);
+		write = malloc(size+1);
+		memset(write, 0, size+1);
+		memcpy(write, buf, size);
+		write[size]='\0';
+		temp->content = malloc(size+1);
+		strcpy(temp->content, write);
+	}
+	else
+	{
+		modsize = offset + size;
+		len = strlen(temp->content);
+		if(modsize>len)
+		{
+			diff = modsize - len;
+			write = malloc(modsize+1);
+			memset(write, 0 , modsize+1);
+			strncpy(write, temp->content, len);
+		}
+		for(i=offset; i<(offset+size);i++)
+		{
+			write[i]=buf[j];
+			j++;
+		}
+		write[i]='\0';
+		strcpy(temp->content, write);
+	}
+	fprintf(stdout, "out ramdisk write\n");
+	fprintf(stdout, "ramdisk write content: %s\n",temp->content);
+	fprintf(stdout, "ramdisk write size: %d\n", size);
+ 	return size;
+	*/
+	int len;
 	char *write = malloc(size+1);
 	int modsize = 0;
 	int diff = 0;
@@ -354,7 +442,7 @@ static int ramdisk_create(const char *path, mode_t mode, struct fuse_file_info *
 		}
 		temp->content[i]='\0';
 	}
- 	return size;
+return size;
  }
 
 
@@ -365,6 +453,38 @@ static int ramdisk_utimens(const char *path, const struct timespec tv[2])
  }
 
 static int ramdisk_open(const char *path, struct fuse_file_info *fi)
+{
+	return 0;
+}
+
+static int ramdisk_rename(const char *from, const char *to)
+{
+	struct node *fromnode = get(from);
+	struct node *tonode = get(to);
+	if(!fromnode)
+		return -ENOENT;
+	if(fromnode->isfile!=1)
+		return -EISDIR;
+	char tempTo[256];
+	strcpy(tempTo, to);
+	fprintf(stdout, "tempTo: %s\n",tempTo);
+	char *token = strtok(tempTo,'/');
+	char file[256];
+	strcpy(file, token);
+	fprintf(stdout,"file: %s\n", file);
+	while(token)
+	{
+		fprintf(stdout, "token: %s\n",token);
+		strcpy(file, token);
+		fprintf(stdout, "file: %s\n",file);
+		token = strtok(NULL,'/');
+	}
+	strcmp(fromnode->filename, file);
+	strcmp(fromnode->abs, to);
+	return 0;
+}
+
+static int ramdisk_release(const char *path, struct fuse_file_info *fi)
 {
 	return 0;
 }
@@ -381,6 +501,8 @@ static struct fuse_operations ramdisk_oper = {
 	.unlink		= ramdisk_rmdir,
 	.read		= ramdisk_read,
 	.write		= ramdisk_write,
+	.rename		= ramdisk_rename,
+	.release	= ramdisk_release,
  };
 
 
@@ -392,13 +514,10 @@ int main(int argc, char *argv[])
         printf("Invalid number of arguments\n");	//todo too many args
         //return -1;
     }
-    printf("in main\n");
     memfree = (long) atoi(argv[4]);
     memfree = memfree * 1024 * 1024;
     argc = argc - 1;
     int out = initRamdisk();
-    printf("%d\n",out);
-    printf("after init ram\n");
     fuse_main(argc, argv, &ramdisk_oper, NULL);
 	return 0;
 }
